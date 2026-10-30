@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {makeRoute,bearing,greatCircle,isLand,elevation,headingAt,routePosition} from '../dist/geography.js';
+import {createFlight,stepFlight} from '../dist/flight-model.js';
+import {sampleWeather,createWeather} from '../dist/weather.js';
+const tokyo=makeRoute(0,1),hongkong=makeRoute(0,2),atlantic=makeRoute(5,7),us=makeRoute(7,8);
+assert(tokyo.initialBearing>60&&tokyo.initialBearing<80);assert(hongkong.initialBearing>210&&hongkong.initialBearing<230);assert(atlantic.oceanFraction>.7);assert(us.oceanFraction<.05);assert(isLand(48.85,2.35));assert(!isLand(0,-140));
+const midpoint=greatCircle({lat:10,lon:170},{lat:10,lon:-170},.5);assert(Math.abs(midpoint.lon)>179,'Dateline crossing must take the short arc');
+const sea=atlantic.samples.find(p=>p.t>.2&&p.t<.8&&!p.land);assert(elevation(atlantic,0,-800-sea.t*11900)<0,'Cross-ocean terrain must be below sea level');assert.equal(elevation(atlantic,0,320),0,'Departure runway must remain flat');assert.equal(elevation(atlantic,0,-13700),0,'Arrival runway must remain flat');
+let f=createFlight({i:7},5,226,{seed:42});f.airborne=true;f.speed=100;f.x=f.weatherCells[1].x;f.z=f.weatherCells[1].z;f.y=1000;f.elapsed=48;const w=sampleWeather(f);assert(w.intensity>.4);f.y=1550;assert(sampleWeather(f).intensity===0,'Climbing above storm must eliminate its forces');f.y=400;assert(sampleWeather(f).intensity===0,'Descending below storm must eliminate its forces');f.y=1000;
+const calm={...f,weatherCells:[]},storm={...f};for(let i=0;i<90;i++){stepFlight(calm,{},1/60);stepFlight(storm,{},1/60)}assert(Math.abs(storm.y-calm.y)>1,'Storm must physically alter altitude');assert(Math.abs(storm.bank-calm.bank)>.01,'Storm must physically alter roll');assert(storm.weather.lift!==1);assert.equal(createFlight({i:2},0,226,{weather:false}).weatherCells.length,0);
+const h=headingAt(tokyo,{x:0,z:320,yaw:0});assert(Math.abs(h-tokyo.initialBearing)<.01);assert(Math.abs(headingAt(tokyo,{x:0,z:320,yaw:-Math.PI/2})-(h+90))<.01);console.log('PASS: real bearings, coastline masks, Atlantic/US routes, dateline, runway flattening, altitude avoidance, physical gust/lift/roll, compass turns');
